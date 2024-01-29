@@ -498,7 +498,10 @@ public class SheetViewController: UIViewController {
                         }
                     })
             } else {
-                let newContentHeight = self.height(for: self.currentSize)
+                let previousSize = self.currentSize
+                let newSize: SheetSize = nearest(to: newHeight, inValues: orderedSizes)
+
+                let newContentHeight = height(for: newSize)
                 UIView.animate(
                     withDuration: animationDuration,
                     delay: 0,
@@ -513,6 +516,9 @@ public class SheetViewController: UIViewController {
                         self.view.layoutIfNeeded()
                     }, completion: { complete in
                         self.isPanning = false
+                        if previousSize != newSize {
+                            self.sizeChanged?(self, newSize, newContentHeight)
+                        }
                     })
             }
         case .possible:
@@ -527,6 +533,29 @@ public class SheetViewController: UIViewController {
      */
     func isVelocityWithinSensitivityRange(_ velocity: CGFloat) -> Bool {
         return (abs(velocity) - (1000 * (1 - Constants.snapMovementSensitivity))) > 0
+    }
+
+    /**
+     Finds the nearest value to a given number out of a given array of float values
+
+     - Parameters:
+     - number: reference float we are trying to find the closest value to
+     - values: array of floats we would like to compare against
+     */
+    func nearest(to number: CGFloat, inValues values: [SheetSize]) -> CGFloat {
+        guard let nearestVal = values.map({ height(for: $0) }).min(by: { abs(number - $0) < abs(number - $1) })
+        else { return number }
+        return nearestVal
+    }
+
+    func nearest(to number: CGFloat, inValues values: [SheetSize]) -> SheetSize {
+        guard let nearestVal = values.min(by: {
+            let heightOne = height(for: $0)
+            let heightTwo = height(for: $1)
+            return abs(number - heightOne) < abs(number - heightTwo)
+        })
+        else { return values.first! }
+        return nearestVal
     }
 
     private func registerKeyboardObservers() {
