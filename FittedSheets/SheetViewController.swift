@@ -10,6 +10,12 @@
 import UIKit
 
 public class SheetViewController: UIViewController {
+    enum Constants {
+        static let indicatorYOffset = CGFloat(8.0)
+        static let snapMovementSensitivity = CGFloat(0.7)
+        static let dragIndicatorSize = CGSize(width: 36.0, height: 5.0)
+    }
+
     public private(set) var options: SheetOptions
     
     /// Default value for autoAdjustToKeyboard. Defaults to true.
@@ -418,15 +424,16 @@ public class SheetViewController: UIViewController {
                     self.contentViewController.view.transform = CGAffineTransform.identity
                 }
             case .ended:
-                let velocity = (0.2 * gesture.velocity(in: self.view).y)
+            let velocity = gesture.velocity(in: self.view).y
+            let animationDuration = TimeInterval(0.5)
+
+            if isVelocityWithinSensitivityRange(velocity) {
                 var finalHeight = newHeight - offset - velocity
                 if velocity > options.pullDismissThreshod {
                     // They swiped hard, always just close the sheet when they do
                     finalHeight = -1
                 }
-                
-                let animationDuration = TimeInterval(abs(velocity*0.0002) + 0.2)
-                
+
                 guard finalHeight > 0 || !(self.dismissOnPull && self.shouldDismiss?(self) ?? true) else {
                     // Dismiss
                     UIView.animate(
@@ -436,16 +443,16 @@ public class SheetViewController: UIViewController {
                         initialSpringVelocity: self.options.transitionVelocity,
                         options: self.options.transitionAnimationOptions,
                         animations: {
-                        self.contentViewController.view.transform = CGAffineTransform(translationX: 0, y: self.contentViewController.view.bounds.height)
-                        self.view.backgroundColor = UIColor.clear
-                        self.transition.setPresentor(percentComplete: 1)
-                        self.overlayView.alpha = 0
-                    }, completion: { complete in
-                        self.attemptDismiss(animated: false)
-                    })
+                            self.contentViewController.view.transform = CGAffineTransform(translationX: 0, y: self.contentViewController.view.bounds.height)
+                            self.view.backgroundColor = UIColor.clear
+                            self.transition.setPresentor(percentComplete: 1)
+                            self.overlayView.alpha = 0
+                        }, completion: { complete in
+                            self.attemptDismiss(animated: false)
+                        })
                     return
                 }
-                
+
                 var newSize = self.currentSize
                 if point.y < 0 {
                     // We need to move to the next larger one
@@ -470,7 +477,7 @@ public class SheetViewController: UIViewController {
                 }
                 let previousSize = self.currentSize
                 self.currentSize = newSize
-                
+
                 let newContentHeight = self.height(for: newSize)
                 UIView.animate(
                     withDuration: animationDuration,
@@ -479,22 +486,47 @@ public class SheetViewController: UIViewController {
                     initialSpringVelocity: self.options.transitionVelocity,
                     options: self.options.transitionAnimationOptions,
                     animations: {
-                    self.contentViewController.view.transform = CGAffineTransform.identity
-                    self.contentViewHeightConstraint.constant = newContentHeight
-                    self.transition.setPresentor(percentComplete: 0)
-                    self.overlayView.alpha = 1
-                    self.view.layoutIfNeeded()
-                }, completion: { complete in
-                    self.isPanning = false
-                    if previousSize != newSize {
-                        self.sizeChanged?(self, newSize, newContentHeight)
-                    }
-                })
-            case .possible:
-                break
-            @unknown default:
-                break // Do nothing
+                        self.contentViewController.view.transform = CGAffineTransform.identity
+                        self.contentViewHeightConstraint.constant = newContentHeight
+                        self.transition.setPresentor(percentComplete: 0)
+                        self.overlayView.alpha = 1
+                        self.view.layoutIfNeeded()
+                    }, completion: { complete in
+                        self.isPanning = false
+                        if previousSize != newSize {
+                            self.sizeChanged?(self, newSize, newContentHeight)
+                        }
+                    })
+            } else {
+                let newContentHeight = self.height(for: self.currentSize)
+                UIView.animate(
+                    withDuration: animationDuration,
+                    delay: 0,
+                    usingSpringWithDamping: self.options.transitionDampening,
+                    initialSpringVelocity: self.options.transitionVelocity,
+                    options: self.options.transitionAnimationOptions,
+                    animations: {
+                        self.contentViewController.view.transform = CGAffineTransform.identity
+                        self.contentViewHeightConstraint.constant = newContentHeight
+                        self.transition.setPresentor(percentComplete: 0)
+                        self.overlayView.alpha = 1
+                        self.view.layoutIfNeeded()
+                    }, completion: { complete in
+                        self.isPanning = false
+                    })
+            }
+        case .possible:
+            break
+        @unknown default:
+            break // Do nothing
         }
+    }
+
+    /**
+     Check if the given velocity is within the sensitivity range
+     */
+    func isVelocityWithinSensitivityRange(_ velocity: CGFloat) -> Bool {
+        return (abs(velocity) - (1000 * (1 - Constants.snapMovementSensitivity))) > 0
     }
 
     private func registerKeyboardObservers() {
